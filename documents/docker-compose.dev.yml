@@ -1,0 +1,16 @@
+# Local development only: Nextcloud on http://127.0.0.1:${DOCS_DEV_PORT:-8081}, no Tailscale.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Never use this override on the Pi: it publishes a port and serves plain HTTP.
+
+services:
+  nextcloud:
+    ports:
+      - "127.0.0.1:${DOCS_DEV_PORT:-8081}:80"
+    environment:
+      OVERWRITEPROTOCOL: http
+      OVERWRITECLIURL: http://127.0.0.1:${DOCS_DEV_PORT:-8081}
+      NEXTCLOUD_TRUSTED_DOMAINS: 127.0.0.1 localhost
+
+  # No tailnet in local development. Start it anyway with `--profile tailscale`.
+  tailscale:
+    profiles: ["tailscale"]

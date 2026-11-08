@@ -1,0 +1,148 @@
+name: media-vault-docs
+
+services:
+  nextcloud:
+    image: nextcloud:35.0.2-apache
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:?set NEXTCLOUD_ADMIN_USER in .env}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:?set NEXTCLOUD_ADMIN_PASSWORD in .env}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${DOCS_HOST:?set DOCS_HOST in .env} localhost
+      # Clients upload in chunks; the limit only matters for non-chunked fallbacks (design D7).
+      PHP_UPLOAD_LIMIT: 16G
+      PHP_MEMORY_LIMIT: 512M
+      # Behind the Tailscale sidecar, which terminates HTTPS and forwards the real host name
+      # (design D4). No OVERWRITEHOST: it would switch off Nextcloud's trusted-domain check.
+      OVERWRITEPROTOCOL: https
+      OVERWRITECLIURL: https://${DOCS_HOST:?set DOCS_HOST in .env}
+      TRUSTED_PROXIES: 172.30.10.0/24
+    volumes:
+      - docs-html:/var/www/html
+      - ${DOCS_ROOT:?set DOCS_ROOT in .env}/data:/var/www/html/data
+      - ${DOCS_ROOT:?set DOCS_ROOT in .env}/config:/var/www/html/config
+      - ${DOCS_ROOT:?set DOCS_ROOT in .env}/custom_apps:/var/www/html/custom_apps
+    networks:
+      - web
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Healthy only once Nextcloud is installed; the first install can take minutes on the Pi.
+      test: ["CMD-SHELL", "curl -fsS http://localhost/status.php | grep -q '\"installed\":true'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+
+  # Runs Nextcloud's background jobs every 5 minutes (design D3).
+  cron:
+    image: nextcloud:35.0.2-apache
+    restart: unless-stopped
+    # Above cron's PHP_MEMORY_LIMIT, so a heavy job fails in PHP instead of being killed (design D9).
+    mem_limit: 640m
+    entrypoint: /cron.sh
+    environment:
+      PHP_MEMORY_LIMIT: 512M
+    volumes:
+      - docs-html:/var/www/html
+      - ${DOCS_ROOT:?set DOCS_ROOT in .env}/data:/var/www/html/data
+      - ${DOCS_ROOT:?set DOCS_ROOT in .env}/config:/var/www/html/config
+      - ${DOCS_ROOT:?set DOCS_ROOT in .env}/custom_apps:/var/www/html/custom_apps
+    networks:
+      - web
+      - data
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+    healthcheck:
+      # /cron.sh execs `busybox crond` as PID 1; the image's busybox has no pgrep applet.
+      test: ["CMD-SHELL", "grep -q crond /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # The only way in: its own tailnet node, HTTPS terminated here, proxied to nextcloud:80 (design D4).
+  tailscale:
+    image: tailscale/tailscale:v1.104.4
+    restart: unless-stopped
+    mem_limit: 128m
+    hostname: ${TS_HOSTNAME:-docs}
+    environment:
+      # Only needed for the first login; the node identity is kept in the docs-ts volume.
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: ${TS_HOSTNAME:-docs}
+      TS_EXTRA_ARGS: --advertise-tags=tag:docs
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_ENABLE_HEALTH_CHECK: "true"
+      TS_LOCAL_ADDR_PORT: 127.0.0.1:9002
+    volumes:
+      - docs-ts:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    networks:
+      - web
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9002/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  db:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - docs-db:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextcloud -d nextcloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    mem_limit: 96m
+    # A pure cache and lock store: bounded, nothing written to disk (design D2, D9).
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  web:
+    ipam:
+      config:
+        - subnet: 172.30.10.0/24
+  data:
+    internal: true
+
+volumes:
+  docs-html:
+  docs-db:
+  docs-ts:
