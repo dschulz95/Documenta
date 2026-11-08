@@ -1,0 +1,17 @@
+# Secrets and deployment-specific values
+.env
+
+# Python virtual environments and caches (local test tooling)
+.venv/
+__pycache__/
+.pytest_cache/
+
+# Local test data (bind-mounted DOCS_ROOT / MEDIA_ROOT during development)
+dev-data/
+
+# Local AI-tool skills and commands (not part of the project)
+.claude/
+.opencode/
+.agents/
+skills-lock.json
+

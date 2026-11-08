@@ -42,7 +42,7 @@ def runner():
     start = sh([
         "docker", "run", "-d", "--name", RUNNER_NAME,
         "-v", "/var/run/docker.sock:/var/run/docker.sock",
-        "-v", f"{STACK_DIR.parent}:/work",
+        "-v", f"{STACK_DIR}:/work",  # the repo root = the stack
         "--tmpfs", f"{BACKUP_MOUNT}:size=2g",
         RUNNER_IMAGE,
     ])

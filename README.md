@@ -1,6 +1,8 @@
-# Document store
+# Documenta
 
-Nextcloud with PostgreSQL and Redis, reachable only from your tailnet. Files are stored as plain files on the SSD.
+A private document store for a Raspberry Pi 5: Nextcloud with PostgreSQL and Redis, reachable only from your tailnet. Files are stored as plain files on the SSD, in a folder tree you organize yourself; you upload from the browser, the Nextcloud phone apps, and the desktop sync client.
+
+It runs as its own Docker Compose project (`media-vault-docs`) next to other stacks such as Synapse, with its own Tailscale node. Planning (proposal, specs, design, tasks, verification log) lives in [`openspec/`](openspec/).
 
 ## Tailscale (one-time, in the [admin console](https://login.tailscale.com/admin))
 
@@ -101,7 +103,7 @@ For everyday use, always upload through the clients.
 Run the stack on your PC at `http://127.0.0.1:8081`, without Tailscale:
 
 ```bash
-# in .env: DOCS_ROOT=../dev-data/documents (the repo's dev-data/ folder is git-ignored)
+# in .env: DOCS_ROOT=./dev-data (git-ignored)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
 ```
 

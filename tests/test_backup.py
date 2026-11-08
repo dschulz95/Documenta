@@ -36,7 +36,7 @@ def test_backup_writes_a_complete_dated_snapshot(empty_backup):
     assert snap in result.stdout
     # A PostgreSQL custom-format dump starts with "PGDMP".
     assert in_runner(f"head -c 5 {snap}/db.dump").stdout == "PGDMP"
-    assert in_runner(f"cmp {snap}/data/owner/files/Contracts/rent.pdf ../dev-data/documents/data/owner/files/Contracts/rent.pdf").returncode == 0
+    assert in_runner(f"cmp {snap}/data/owner/files/Contracts/rent.pdf dev-data/data/owner/files/Contracts/rent.pdf").returncode == 0
     assert in_runner(f"test -f {snap}/config/config.php && test -d {snap}/custom_apps").returncode == 0
 
 

@@ -108,7 +108,7 @@ def test_tailscale_sidecar_gives_the_stack_its_own_tagged_tailnet_node(compose_c
     assert env["TS_STATE_DIR"] == "/var/lib/tailscale"
     mounts = _mounts(ts)
     assert mounts["/var/lib/tailscale"] == ("volume", "docs-ts")
-    assert mounts["/config"][0] == "bind" and mounts["/config"][1].replace("\\", "/").endswith("/documents/tailscale")
+    assert mounts["/config"][0] == "bind" and mounts["/config"][1].replace("\\", "/").endswith(f"/{STACK_DIR.name}/tailscale")
     assert set(ts["networks"]) == {"web"}
     assert ts["depends_on"]["nextcloud"]["condition"] == "service_healthy"
 
